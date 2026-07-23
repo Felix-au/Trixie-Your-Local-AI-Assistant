@@ -18,26 +18,35 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Why GriffinX?](#-why-griffinx)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Pipeline Flow](#-pipeline-flow)
-- [Model Pipeline](#-model-pipeline)
-- [Quick Start](#-quick-start)
-- [Hardware-Accelerated LLM Setup](#-hardware-accelerated-llm-setup)
-- [Build Standalone EXE](#-build-standalone-exe)
-- [Project Structure](#-project-structure)
-- [Dependencies](#-dependencies)
-- [Configuration](#-configuration)
-- [Roadmap](#-roadmap)
-- [Author](#-author)
+- 🔍 [Overview](#overview)
+- 🎯 [Why GriffinX?](#why-griffinx)
+- ✨ [Features](#features)
+- 🏗 [Architecture](#architecture)
+- 🔄 [Pipeline Flow and How It Works](#pipeline-flow-and-how-it-works)
+- 🏃 [Application Walkthrough](#application-walkthrough)
+- 📊 [Model Pipeline and Hardware Adaptation](#model-pipeline-and-hardware-adaptation)
+- ⚡ [Smart Intent Cache](#smart-intent-cache)
+- 🎨 [UI Guide](#ui-guide)
+  - [Dashboard](#dashboard)
+  - [Ball Mode (Default)](#ball-mode-default)
+  - [Expanded Overlay](#expanded-overlay)
+  - [System Tray](#system-tray)
+- ⚙️ [Command Executor and App Resolution](#command-executor-and-app-resolution)
+- 🚀 [Quick Start](#quick-start)
+- 🔧 [Hardware-Accelerated LLM Setup](#hardware-accelerated-llm-setup)
+- 📦 [Build Standalone EXE and Packaging Notes](#build-standalone-exe-and-packaging-notes)
+- 📁 [Project Structure and Key Components](#project-structure-and-key-components)
+- 📚 [Dependencies](#dependencies)
+- ⚙️ [Configuration](#configuration)
+- 🗺️ [Roadmap](#roadmap)
+- ⚠️ [Troubleshooting](#troubleshooting)
+- 👤 [Author](#author)
 
 ---
 
-## 🔍 Overview
+## Overview
 
 **GriffinX** is a Windows desktop assistant that lets you control your PC with your voice while keeping all inference local. It listens through push-to-talk, transcribes speech with a local Whisper model, classifies your intent with a local Qwen 3 4B LLM running via `llama.cpp`, executes desktop actions (open/close apps, type text, press hotkeys, run macros), learns from your feedback, and speaks back using offline Piper neural text-to-speech.
 
@@ -47,7 +56,7 @@ No cloud is required for normal use. Model files (~4 GB total) are downloaded on
 
 ---
 
-## 🎯 Why GriffinX?
+## Why GriffinX?
 
 > **Most AI assistants either live in a browser or depend on cloud APIs. GriffinX gives you direct desktop control — offline.**
 
@@ -63,7 +72,7 @@ No cloud is required for normal use. Model files (~4 GB total) are downloaded on
 
 ---
 
-## ✨ Features
+## Features
 
 ### 🎙️ Voice Input
 | Feature | Description |
@@ -118,7 +127,7 @@ No cloud is required for normal use. Model files (~4 GB total) are downloaded on
 | **Async Playback** | Speech runs in a background thread — never blocks the UI |
 | **WAV Pipeline** | Synthesizes to in-memory WAV buffer → PCM16 → float32 → `sounddevice` |
 
-### 🏠 Dashboard (Command Centre)
+### Dashboard (Command Centre)
 | Feature | Description |
 |---|---|
 | **System Gauges** | Real-time CPU, RAM, GPU, VRAM dials — GPU shows N/A gracefully on CPU-only |
@@ -129,7 +138,7 @@ No cloud is required for normal use. Model files (~4 GB total) are downloaded on
 | **Golden-Brown Theme** | Premium warm aesthetic with gold-glow accents on interactive elements |
 | **Always-On Tray** | Closing the dashboard silently minimises to system tray — no notification |
 
-### 🖥️ Floating Overlay & Ball Mode
+### Floating Overlay & Ball Mode
 | Feature | Description |
 |---|---|
 | **Ball Mode Default** | GriffinX starts as a compact branded ball — single-click opens text input, double-click expands |
@@ -144,7 +153,7 @@ No cloud is required for normal use. Model files (~4 GB total) are downloaded on
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```mermaid
 graph TD
@@ -190,8 +199,8 @@ graph TD
 │  │ Configurable   ├───►│  │ Dashboard│  │ Floating │ │ System │   │  │
 │  │ push-to-talk   │    │  │ (gauges, │  │ Overlay  │ │ Tray   │   │  │
 │  │ hotkey         │    │  │  models, │  │ (ball +  │ │ Icon   │   │  │
-│  └────────────────┘    │  │  logs,   │  │  expand) │ └────────┘   │  │
-│                        │  │  settings│  └────┬─────┘              │  │
+│  │                │    │  │  logs,   │  │  expand) │ └────────┘   │  │
+│  └────────────────┘    │  │  settings│  └────┬─────┘              │  │
 │                        │  └──────────┘       │                    │  │
 │                        └─────────────────────┼────────────────────┘  │
 │                                              │                       │
@@ -234,7 +243,9 @@ graph TD
 
 ---
 
-## 🔄 Pipeline Flow
+## Pipeline Flow and How It Works
+
+### High-Level Path Diagram
 
 ```mermaid
 flowchart TD
@@ -298,9 +309,46 @@ Interaction logged to SQLite (timestamp, input, intent, status, feedback)
 
 </details>
 
+### General Processing Overview
+
+1. **You hold the hotkey and speak** — `Ctrl + CapsLock`. GriffinX records from your default microphone at 16 kHz mono.
+2. **You release the key** — Recording stops. The audio is sent to the local Faster-Whisper model for transcription. A command vocabulary prompt biases recognition toward app names and common actions.
+3. **The transcript goes to the intent engine** — First, GriffinX checks the intent cache for a fuzzy match (≥80% similarity). If found, it skips the LLM entirely and executes instantly. If not, the Qwen 3 4B model classifies the command into a structured JSON intent.
+4. **GriffinX executes the action** — Opens an app, types text, presses a hotkey, runs a macro, or answers a question.
+5. **GriffinX speaks the result** — Using offline Piper neural TTS.
+6. **You confirm with feedback** — 👍 caches the mapping for instant future use. 👎 logs it as incorrect.
+
+If you don't use voice, you can type commands directly into the overlay's text box. The only skipped step is speech-to-text.
+
 ---
 
-## 🧪 Model Pipeline
+## Application Walkthrough
+
+### Starting GriffinX
+
+When you launch `main.py` (or `GriffinX.exe`), the following orchestration process takes place:
+
+1. **Configuration Load**: `config.json` is loaded to fetch model paths, device settings, and cache thresholds.
+2. **Database Initialization**: The SQLite database opens at `logs/history.db` to handle interaction history, the intent cache, and macros.
+3. **Dashboard Opening**: The Dashboard opens immediately, centered at 80% of screen width and height, displaying real-time system gauges and model status cards.
+4. **Overlay Launch**: The floating ball appears in the bottom-right corner as the default compact interaction node.
+5. **System Tray Integration**: A tray icon is registered with the branded `GriffinX.ico` file.
+6. **Background Model Downloads**: Parallel background threads initiate download processes for Whisper, Qwen 3, and Piper TTS, displaying percentages and progress bars in the Dashboard.
+7. **Audio Engine Preparation**: Microphone inputs are mapped and the Whisper engine prepares for lazy-loading on the first voice command.
+8. **LLM Engine Preparation**: The Qwen GGUF model path is configured, ready to load on the first intent classification.
+9. **TTS Engine Init**: Piper voice files are loaded (or TTS is disabled gracefully if models are missing).
+10. **Hotkey Hooks**: The global keyboard hooks register the push-to-talk key combination (default: `Ctrl + CapsLock`) without suppressing the baseline keys.
+
+### Closing & Minimizing
+
+- **Close Dashboard**: Clicking the close window button silently minimizes the dashboard to the system tray.
+- **Quit GriffinX**: Right-clicking the floating ball or system tray icon and selecting "Quit" terminates the application and unhooks all keyboard hooks.
+- **Collapse Overlay**: Clicking the `×` button on the expanded overlay collapses it back to Ball Mode.
+- **Tray Toggle**: Double-clicking the tray icon restores/opens the Dashboard.
+
+---
+
+## Model Pipeline and Hardware Adaptation
 
 GriffinX ships without large model files. On first use it downloads three models with live progress in the Dashboard:
 
@@ -309,8 +357,11 @@ GriffinX ships without large model files. On first use it downloads three models
 | Faster-Whisper Medium English | CTranslate2 | ~1.5 GB | Speech-to-text | `models/faster-whisper-medium.en/` |
 | Qwen 3 4B (Q4_K_M GGUF) | llama.cpp | ~2.5 GB | Intent classification & chat | `models/Qwen_Qwen3-4B-Q4_K_M.gguf` |
 | Piper Lessac Medium | ONNX Runtime | ~15 MB | Text-to-speech | `models/en_US-lessac-medium.onnx` |
+| Piper voice config | ONNX Runtime | ~1 KB | TTS voice configuration | `models/en_US-lessac-medium.onnx.json` |
 
 ### Hardware Adaptation
+
+The application auto-detects system resources to optimize model deployment:
 
 | Hardware | Whisper | LLM | TTS | Dashboard GPU Gauges |
 |---|---|---|---|---|
@@ -318,7 +369,7 @@ GriffinX ships without large model files. On first use it downloads three models
 | **AMD GPU** | CPU, int8 | Vulkan backend (via install.py) | CPU (ONNX) | N/A |
 | **CPU only** | CPU, int8 | CPU inference | CPU (ONNX) | N/A |
 
-Pre-download all models before first use:
+To pre-download all models before launching the visual application:
 
 ```powershell
 uv run python download_models.py
@@ -326,7 +377,134 @@ uv run python download_models.py
 
 ---
 
-## 🚀 Quick Start
+## Smart Intent Cache
+
+The intent cache is the core learning system of GriffinX. When a user marks an action as successful (clicking the 👍 button), the exact transcription-to-intent mapping is cached. Future inputs that match a cached pattern bypass the LLM entirely, yielding sub-second execution speeds.
+
+### Similarity Thresholds
+
+A fuzzy matching algorithm (`SequenceMatcher`) checks spoken input against the cache:
+
+| Command Length | Threshold | Reasoning |
+|---|---|---|
+| < 8 words | 90% similarity | Short commands require tighter constraints to prevent false execution. |
+| ≥ 8 words | 80% similarity | Longer commands allow more semantic and structural variance. |
+
+### Match Scenarios
+
+| Spoken Command | Cached Entry | Similarity | Result |
+|---|---|---|---|
+| *"Open Chrome"* | *"Open Chrome"* | 100% | **HIT** (Skip LLM) |
+| *"Open Google Chrome"* | *"Open Chrome"* | ~82% | **HIT** (Skip LLM) |
+| *"Open Brave"* | *"Open Chrome"* | ~55% | **MISS** (Passes to LLM) |
+
+---
+
+## UI Guide
+
+### Dashboard
+
+The Dashboard is the control center of GriffinX. It splits into a 5:2 column layout:
+* **Primary (Left)**: Circular system resources (CPU, RAM, GPU, VRAM) alongside status cards for the three AI engines.
+* **Secondary (Right)**: Timestamped activity feed log and setting options (startup toggle, hotkey editor).
+
+#### AI Model Cards
+Display engine status using colored icons (✅ ready, ⏳ downloading, ❌ failed) accompanied by a 16px progress bar with a golden gradient fill and centered text.
+
+#### System Gauges
+Monitored via `psutil` (for CPU/RAM) and optional `pynvml` (for GPU/VRAM). If an NVIDIA card is absent, GPU resource meters show "N/A" gracefully.
+
+#### Hotkey Editor
+A click-to-capture interface that updates settings atomically and dynamically re-registers global system hooks.
+
+---
+
+### Ball Mode (Default)
+
+GriffinX starts as a compact floating circle utilizing `trixie-circular.jpeg`.
+
+* **Single-click**: Opens or closes a quick-input text bar (includes a 300ms click delay to prevent accidental inputs while dragging).
+* **Double-click**: Expands the interface to the Translucent Overlay.
+* **Right-click**: Context menu (Open Dashboard, Quit).
+* **Repositioning**: Draggable anywhere on the screen.
+
+#### Animation Rings
+* **Idle**: Amber breathing ring.
+* **Listening**: Green pulsing ring.
+* **Transcribing**: Green spinning arc.
+* **Thinking / Executing**: Cyan spinning arc.
+
+#### Feedback & Responses
+- **👍/👎 Buttons**: Centered below the ball (44x44px target) to confirm cache additions.
+- **Speech Bubble**: Appears above the ball for text readouts. Auto-hides based on word count (5 seconds for short responses, up to 15 seconds for long text).
+
+---
+
+### Expanded Overlay
+
+A glassmorphic, translucent, always-on-top panel that grows dynamically to fit multi-line transcripts:
+
+* **Header Logo**: Features the GriffinX logo. Left-clicking it opens the Dashboard.
+* **Collapse (`×`) Button**: Restores Ball Mode.
+* **Status Dot**: Indicates operational state (🟢 Listening, 🟡 Thinking, ⚪ Idle, 🔴 Error).
+* **Logs & Content**: Dedicated rows for "YOU:" (user transcript) and "GriffinX:" (output/chat response).
+* **Inputs**: Command text box centered at the bottom of the overlay.
+
+---
+
+### System Tray
+
+A background system node matching the branded `GriffinX.ico`:
+
+* **Double-click**: Direct restoration of the Dashboard.
+* **Context Options**: Restores/hides overlay, triggers push-to-talk listening, or executes a clean application exit.
+
+---
+
+## Command Executor and App Resolution
+
+For intents matching `open_app` or `close_app`, the execution layer maps user utterances to desktop processes via a structured resolution ladder:
+
+```
+1. Direct Whitelist Match (Matches key e.g., "chrome" -> "chrome.exe")
+      │
+      ▼
+2. Absolute File Path Check (Verifies if input targets a local path directly)
+      │
+      ▼
+3. Fuzzy Whitelist Check (Checks key substrings e.g., "google chrome")
+      │
+      ▼
+4. Dynamic Shortcut Scan (Resolves shortcuts registered from Start Menu & Desktop)
+      │
+      ▼
+5. Operating System Fallback (Passes target as-is to Windows shell "start")
+```
+
+### Dynamic App Discovery
+
+During boot, GriffinX crawls the following directories for shortcut (`.lnk`) files, registering them into the execution lookup table:
+* `%ProgramData%\Microsoft\Windows\Start Menu\Programs\`
+* `%APPDATA%\Microsoft\Windows\Start Menu\Programs\`
+* `%PUBLIC%\Desktop\`
+* `%USERPROFILE%\Desktop\`
+
+### Built-in Whitelist Examples
+
+- **Notepad**: `notepad.exe`
+- **Google Chrome**: `chrome.exe`
+- **VS Code**: `code.exe`
+- **Windows Terminal**: `wt.exe`
+- **Settings**: `ms-settings:`
+
+### Safety Restrictions
+* Macro playback delays are capped at 30 seconds.
+* Script running is strictly restricted to `.py` extension targets.
+* PyAutoGUI failsafe is enabled (shoving the mouse cursor to any corner of the screen aborts macro executions).
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
@@ -370,7 +548,7 @@ On first launch:
 
 ---
 
-## 🔧 Hardware-Accelerated LLM Setup
+## Hardware-Accelerated LLM Setup
 
 By default, `llama-cpp-python` installs with CPU-only support. For GPU acceleration, run the included installer:
 
@@ -390,49 +568,36 @@ This script:
 
 ---
 
-## 📦 Build Standalone EXE
+## Build Standalone EXE and Packaging Notes
+
+To build a standalone executable:
 
 ```powershell
 uv sync --extra build
 uv run python build.py
 ```
 
-Output:
+This invokes a PyInstaller compilation pipeline producing `dist/GriffinX.exe`.
 
-```
-dist/
-└── GriffinX.exe      # Single-file executable (windowed, no console)
-                     # Python runtime + all deps bundled via PyInstaller
-```
+### Packaging Composition
+* **Bundled Items**: Python runtime, execution libraries (`llama-cpp-python`, `faster-whisper`, `PySide6`, `piper-tts`), and all UI/core modules.
+* **Non-Bundled Items**: The ~4 GB of model binaries. These are excluded to prevent an excessively large executable size. They auto-download on first runtime and cache into the local `models/` folder.
+* **Offline Deployment**: For air-gapped environments, ship the populated `models/` directory alongside `GriffinX.exe`.
 
-### What's Bundled Inside the EXE
-- Python runtime + all dependencies (llama-cpp-python, faster-whisper, PySide6, piper-tts, etc.)
-- All `core/`, `ui/`, and `assets/` modules
-- Hidden imports for keyboard, sounddevice, llama_cpp, faster_whisper, pynvml
+### System Compatibility
 
-### What Downloads on First Run
-- **STT model**: Faster-Whisper Medium English (~1.5 GB) → `models/faster-whisper-medium.en/`
-- **LLM model**: Qwen 3 4B GGUF (~2.5 GB) → `models/Qwen_Qwen3-4B-Q4_K_M.gguf`
-- **TTS model**: Piper Lessac voice + config (~15 MB) → `models/en_US-lessac-medium.onnx`
+The executable dynamically maps hardware:
 
-### CPU + GPU Compatibility
-
-The built executable runs on **both CPU-only and NVIDIA GPU** environments without modification:
-
-| Component | CPU-only | NVIDIA GPU |
+| Component | CPU-only Environment | NVIDIA GPU Environment |
 |---|---|---|
-| LLM inference | CPU (slower, but functional) | GPU-accelerated via CUDA |
-| Whisper STT | CPU int8 | CUDA float16 |
-| Piper TTS | CPU ONNX | CPU ONNX |
-| Dashboard GPU gauges | Shows N/A | Shows real-time GPU/VRAM |
-
-> **Why not bundle the models?** The models total ~4 GB — bundling would create an impractically large executable. Instead, they download once on first launch and are cached permanently in `models/`.
-
-For offline distribution, ship the populated `models/` folder beside `GriffinX.exe`.
+| **LLM Classification** | CPU Core execution | CUDA acceleration |
+| **Whisper STT** | INT8 CPU processing | float16 CUDA execution |
+| **Piper TTS** | ONNX CPU runtime | ONNX CPU runtime |
+| **Dashboard Gauges** | Displays "N/A" | Shows VRAM/GPU details |
 
 ---
 
-## 📁 Project Structure
+## Project Structure and Key Components
 
 ```
 GriffinX/
@@ -477,16 +642,36 @@ GriffinX/
 ├── models/                      # Runtime model storage (auto-populated, gitignored)
 ├── logs/                        # SQLite database storage (gitignored)
 │
-├── GriffinX.md                    # Detailed user guide with worked examples
 ├── guide.md                     # Quick-start guide
-├── README.md                    # This file
+├── README.md                    # Core README file
 ├── LICENSE                      # MIT License
 └── .gitignore                   # Ignores models, logs, venv, build artifacts
 ```
 
+### Key Core Components
+
+| Component | File | Role |
+|---|---|---|
+| **App Controller** | `main.py` | Entry point. Wires all services, manages feedback loop, background model downloads, configurable push-to-talk hotkey. |
+| **Audio Engine** | [audio.py](core/audio.py) | Microphone capture at 16kHz mono. Lazy-loads Faster-Whisper. VAD-filtered transcription with command priming. |
+| **LLM Engine** | [llm_engine.py](core/llm_engine.py) | Qwen 3 4B via llama-cpp-python. Structured JSON intent output. Think-block stripping and robust JSON extraction. |
+| **Context Manager** | [context.py](core/context.py) | System prompt with intent examples. Short-term memory from last 5 interactions. |
+| **Command Executor** | [executor.py](core/executor.py) | Resolves app names via dynamic scanning. Executes open/close/type/hotkey/script/delay actions. |
+| **Macro Manager** | [macro_manager.py](core/macro_manager.py) | Creates macros from history, binds hotkeys, replays action sequences. |
+| **TTS Engine** | [tts_engine.py](core/tts_engine.py) | Piper neural TTS. WAV synthesis → PCM16 → float32 → sounddevice playback. Async thread. |
+| **Model Manager** | [model_manager.py](core/model_manager.py) | Downloads models from HuggingFace with Qt progress signals (`object` type for large files). Atomic writes. |
+| **DB Manager** | [db.py](core/db.py) | SQLite with 3 tables: history (interactions + feedback), intent_cache (verified mappings), macros. |
+| **UI Engine** | [app.py](ui/app.py) | PySide6 floating overlay (ball mode default + expanded), system tray, text input, feedback buttons, right-click context menu. |
+| **Dashboard** | [dashboard.py](ui/dashboard.py) | PySide6 main window with system gauges, model cards with progress bars, activity log, hotkey editor, and settings. |
+| **Theme** | [theme.py](ui/theme.py) | Golden-brown design system — colors, fonts, dimensions, gold-glow effects, global QSS stylesheet. |
+| **Widgets** | [widgets/](ui/widgets) | Reusable GaugeWidget, ModelCard (16px progress bar), StatCard with gradient backgrounds. |
+| **System Monitor** | [system_monitor.py](core/system_monitor.py) | CPU/RAM/GPU/VRAM stats via psutil and optional pynvml (graceful N/A). |
+| **Settings** | [settings.py](core/settings.py) | JSON settings persistence at %LOCALAPPDATA%/GriffinX/ (atomic writes). |
+| **Startup Manager** | [startup_manager.py](core/startup_manager.py) | Windows Registry startup management. |
+
 ---
 
-## 📚 Dependencies
+## Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -510,7 +695,7 @@ GriffinX/
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 All runtime configuration lives in [`config.json`](config.json):
 
@@ -539,7 +724,7 @@ All runtime configuration lives in [`config.json`](config.json):
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 ### Planned Features
 
@@ -549,32 +734,61 @@ All runtime configuration lives in [`config.json`](config.json):
 | **Voice Responses** | When a general query is answered, GriffinX speaks the response aloud via Piper TTS (toggle on/off in Dashboard settings) | 🔜 Next |
 | **Text Narration** | Select/highlight text anywhere, then click the GriffinX ball — GriffinX reads the selected text aloud | 🔜 Next |
 
-### Improvement Ideas
-
-#### High Impact
-- **Conversation Mode** — Multi-turn dialogue for complex queries instead of single-shot intent classification
-- **Custom Wake Word** — Always-on listening with a wake word (e.g., "Hey GriffinX") instead of push-to-talk
-- **Plugin System** — Let users add custom intents and executors without modifying core code
-- **Cross-Platform** — Port to macOS (Core Audio) and Linux (PulseAudio)
-
-#### Medium Impact
-- **Streaming TTS** — Stream Piper output as it generates for reduced perceived latency
-- **Multiple Voices** — Let users choose from different Piper voice models
-- **Command Suggestions** — Auto-suggest likely commands based on history patterns
-
-#### Polish
-- **Overlay Themes** — Additional theme presets beyond golden-brown
-- **Accessibility** — Screen reader support and keyboard-only navigation
-- **Auto-Update** — Check GitHub releases for new versions on startup
+### Future Ideas
+- **Conversation Mode** — Multi-turn dialogue for complex queries instead of single-shot intent classification.
+- **Custom Wake Word** — Always-on listening with a wake word (e.g., "Hey GriffinX") instead of push-to-talk.
+- **Plugin System** — User-defined intents and executors.
+- **Multiple TTS Voices** — Choose from different Piper voice models.
+- **Cross-Platform** — macOS and Linux support.
+- **Streaming TTS** — Stream Piper output as it generates for reduced perceived latency.
+- **Multiple Voices** — Let users choose from different Piper voice models.
+- **Command Suggestions** — Auto-suggest likely commands based on history patterns.
+- **Overlay Themes** — Additional theme presets beyond golden-brown.
+- **Accessibility** — Screen reader support and keyboard-only navigation.
+- **Auto-Update** — Check GitHub releases for new versions on startup.
 
 ---
 
-## 👤 Author
+## Troubleshooting
+
+### Transcription is wrong
+- Use a headset or move closer to the microphone.
+- Reduce background noise.
+- Keep commands short and direct.
+- Prefer common app names: "Chrome", "Notepad", "File Explorer".
+- The transcription prompt is biased toward command vocabulary — conversational speech may be less accurate.
+
+### First command is slow
+The Whisper model (~1.5 GB) downloads and loads on the first voice command. The LLM (~2.5 GB) loads on the first intent classification. Subsequent commands use the already-loaded models.
+
+### GriffinX opens the wrong app
+1. Use the 👎 feedback button so GriffinX doesn't cache the wrong mapping.
+2. Type the command once to test whether transcription or intent parsing caused the issue.
+3. Check if the app has a `.lnk` shortcut in Start Menu or Desktop — GriffinX scans those on startup.
+
+### No audio input
+- Check the Windows default microphone in Sound Settings.
+- Ensure app microphone permissions are enabled.
+- GriffinX uses the default input device via `sounddevice` — no device selection UI exists yet.
+
+### LLM returns garbage
+- The Qwen 3 model may output `<think>` blocks — these are stripped automatically.
+- If JSON extraction fails, GriffinX falls back to `general_query` with the raw text as the message.
+- Check `logs/` for the SQLite database to inspect past interactions.
+
+### TTS is silent
+- Verify `models/en_US-lessac-medium.onnx` and its `.json` config file exist.
+- Check terminal output for "Piper TTS engine initialized" or error messages.
+- TTS is disabled gracefully if the model is missing — all other features continue working.
+
+---
+
+## Author
 
 **Felix-au** (Harshit Soni)
 
 - 🔗 GitHub: [github.com/Felix-au](https://github.com/Felix-au)
-- 📧 Email: [harshit.soni.23cse@bmu.edu.in](mailto:harshit.soni.23cse@bmu.edu.in)
+- 📧 Email: [felixaugum@gmail.com](mailto:felixaugum@gmail.com)
 
 ---
 
